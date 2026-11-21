@@ -5,8 +5,12 @@ import math
 import os
 from pathlib import Path
 
+import base64
+import copy
+import xml.etree.ElementTree as ET
+
 import cairosvg
-from PIL import Image
+from PIL import Image, ImageFilter
 
 
 def shadow(cx, cy, rx, ry, opacity=0.18):
@@ -15,10 +19,14 @@ def shadow(cx, cy, rx, ry, opacity=0.18):
 
 
 def toast(x, y, angle, variant):
-    outline = 'M -78,70 L -81,-23 C -107,-37 -101,-69 -74,-79 C -53,-100 -23,-96 0,-90 C 29,-103 63,-91 77,-75 C 104,-65 104,-34 82,-23 L 79,70 Q 0,83 -78,70 Z'
+    outline = 'M -78,70 L -80,57 -79,44 -82,27 -80,11 -83,-9 -81,-23 C -107,-37 -101,-69 -74,-79 C -64,-88 -56,-91 -49,-90 C -36,-98 -18,-93 0,-90 C 14,-97 24,-97 34,-93 C 49,-92 65,-87 77,-75 C 104,-65 104,-34 82,-23 L 81,-7 83,7 80,23 82,39 79,54 79,70 Q 63,75 49,74 Q 28,81 9,77 Q -14,82 -31,76 Q -57,79 -78,70 Z'
     inner = 'M -65,59 L -68,-30 C -90,-43 -87,-61 -66,-66 C -44,-84 -23,-81 0,-76 C 25,-89 53,-78 65,-63 C 86,-58 88,-43 69,-31 L 66,59 Q 0,69 -65,59 Z'
     parts = [f'<g transform="translate({x} {y}) rotate({angle})">', f'<path d="{outline}" fill="#6b3015" transform="translate(5 5)"/>', f'<path d="{outline}" fill="url(#crust)" stroke="#9c501c" stroke-width="1.2"/>', f'<path d="{inner}" fill="url(#crumb)" stroke="#f3cc78" stroke-width="2"/>']
-    for i in range(240):
+    for i in range(19):
+        px = -51 + (i * 37 + variant * 23) % 102
+        py = -48 + (i * 53 + variant * 11) % 98
+        parts.append(f'<ellipse cx="{px}" cy="{py}" rx="{4+i%5}" ry="{2+i%3}" fill="#814019" opacity=".17" filter="url(#specular)"/>')
+    for i in range(900):
         px = -63 + ((i * 47 + variant * 17) % 127)
         py = -59 + ((i * 71 + variant * 29) % 116)
         if py < -46 and abs(px) > 49:
@@ -36,13 +44,17 @@ def toast(x, y, angle, variant):
 def make_svg():
     s = ['''<svg xmlns="http://www.w3.org/2000/svg" width="2048" height="2048" viewBox="0 0 2048 2048">
 <defs>
- <linearGradient id="background" x2="0" y2="1"><stop stop-color="#eeeae2"/><stop offset=".57" stop-color="#f6f3ed"/><stop offset="1" stop-color="#d8d5ce"/></linearGradient>
- <radialGradient id="vignette"><stop offset=".32" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#70675c" stop-opacity=".15"/></radialGradient>
- <linearGradient id="counter" x2="0" y2="1"><stop stop-color="#eeece6" stop-opacity="0"/><stop offset=".3" stop-color="#e9e6df"/><stop offset=".7" stop-color="#e4e0d8"/><stop offset="1" stop-color="#d5d0c7"/></linearGradient>
- <linearGradient id="chrome" x1="0" y1="0" x2="1" y2=".13"><stop stop-color="#8c9392"/><stop offset=".04" stop-color="#d4d8d5"/><stop offset=".12" stop-color="#f3f4ef"/><stop offset=".32" stop-color="#dadcd7"/><stop offset=".52" stop-color="#b1b7b3"/><stop offset=".66" stop-color="#e8eae5"/><stop offset=".83" stop-color="#c0c5c0"/><stop offset="1" stop-color="#858e8a"/></linearGradient>
- <linearGradient id="frontShade" x2="0" y2="1"><stop stop-color="#fff" stop-opacity=".25"/><stop offset=".45" stop-color="#fff" stop-opacity="0"/><stop offset=".8" stop-color="#343e39" stop-opacity=".05"/><stop offset="1" stop-color="#313c36" stop-opacity=".38"/></linearGradient>
- <linearGradient id="top" x1=".1" y1="0" x2=".65" y2="1"><stop stop-color="#f8f8f1"/><stop offset=".25" stop-color="#d3d8d2"/><stop offset=".52" stop-color="#a1aaa4"/><stop offset=".73" stop-color="#edf0e9"/><stop offset="1" stop-color="#a9b0a9"/></linearGradient>
- <linearGradient id="side" x2="1" y2=".3"><stop stop-color="#959c94"/><stop offset=".2" stop-color="#d2d5ca"/><stop offset=".65" stop-color="#939a90"/><stop offset="1" stop-color="#626c62"/></linearGradient>
+ <linearGradient id="background" x2="0" y2="1"><stop stop-color="#d9d3c9"/><stop offset=".48" stop-color="#dfd9cf"/><stop offset=".72" stop-color="#c9c2b7"/><stop offset="1" stop-color="#bdb6aa"/></linearGradient>
+ <radialGradient id="vignette" cx=".49" cy=".48" r=".68"><stop offset=".25" stop-color="#302820" stop-opacity="0"/><stop offset="1" stop-color="#302820" stop-opacity=".12"/></radialGradient>
+ <radialGradient id="hotspot"><stop stop-color="white" stop-opacity=".10"/><stop offset="1" stop-color="white" stop-opacity="0"/></radialGradient>
+ <radialGradient id="suspension"><stop stop-color="#ffac48" stop-opacity=".25"/><stop offset=".48" stop-color="#f79731" stop-opacity=".16"/><stop offset="1" stop-color="#ef7b22" stop-opacity="0"/></radialGradient>
+ <radialGradient id="warmReflection"><stop stop-color="#d99445" stop-opacity=".35"/><stop offset="1" stop-color="#d99445" stop-opacity="0"/></radialGradient>
+ <linearGradient id="counter" x2="0" y2="1"><stop stop-color="#d7d0c5" stop-opacity="0"/><stop offset=".3" stop-color="#d6cfc3"/><stop offset=".7" stop-color="#d1c9bc"/><stop offset="1" stop-color="#c4bbae"/></linearGradient>
+ <linearGradient id="sheen"><stop stop-color="white" stop-opacity="0"/><stop offset=".35" stop-color="white" stop-opacity=".13"/><stop offset=".7" stop-color="white" stop-opacity=".03"/><stop offset="1" stop-color="#4f4438" stop-opacity=".04"/></linearGradient>
+ <linearGradient id="chrome" x1="0" y1="0" x2="1" y2=".08"><stop stop-color="#59615f"/><stop offset=".06" stop-color="#c1c6c4"/><stop offset=".13" stop-color="#fffffb"/><stop offset=".23" stop-color="#e4e6e1"/><stop offset=".41" stop-color="#a7aca8"/><stop offset=".56" stop-color="#e9ece7"/><stop offset=".69" stop-color="#c0c4bf"/><stop offset=".84" stop-color="#777f7b"/><stop offset="1" stop-color="#454e4b"/></linearGradient>
+ <linearGradient id="frontShade" x2="0" y2="1"><stop stop-color="#fff" stop-opacity=".32"/><stop offset=".25" stop-color="#fff" stop-opacity="0"/><stop offset=".63" stop-color="#8d7960" stop-opacity=".11"/><stop offset=".83" stop-color="#343b36" stop-opacity=".10"/><stop offset="1" stop-color="#222b26" stop-opacity=".43"/></linearGradient>
+ <linearGradient id="top" x1=".1" y1="0" x2=".65" y2="1"><stop stop-color="#fffffa"/><stop offset=".22" stop-color="#bfc3bc"/><stop offset=".43" stop-color="#b1a18b"/><stop offset=".60" stop-color="#787e76"/><stop offset=".76" stop-color="#ecede5"/><stop offset="1" stop-color="#979f97"/></linearGradient>
+ <linearGradient id="side" x2="1" y2=".3"><stop stop-color="#656d66"/><stop offset=".2" stop-color="#afb4a9"/><stop offset=".65" stop-color="#747c72"/><stop offset="1" stop-color="#414a41"/></linearGradient>
  <linearGradient id="enamel" x2="1" y2=".6"><stop stop-color="#f4ecd8"/><stop offset=".44" stop-color="#e4d9bd"/><stop offset="1" stop-color="#b3ab94"/></linearGradient>
  <linearGradient id="crust" x2=".8" y2="1"><stop stop-color="#e7b257"/><stop offset=".3" stop-color="#ba6c25"/><stop offset=".75" stop-color="#95501c"/><stop offset="1" stop-color="#6d3519"/></linearGradient>
  <radialGradient id="crumb" cx=".41" cy=".35" r=".8"><stop stop-color="#f9d586"/><stop offset=".4" stop-color="#ebba60"/><stop offset=".74" stop-color="#d28b37"/><stop offset="1" stop-color="#a86423"/></radialGradient>
@@ -50,7 +62,6 @@ def make_svg():
  <linearGradient id="butter" x2=".6" y2="1"><stop stop-color="#fff1ad"/><stop offset=".4" stop-color="#f7d572"/><stop offset="1" stop-color="#c69d3d"/></linearGradient>
  <linearGradient id="knife" x2=".25" y2="1"><stop stop-color="#fcffff"/><stop offset=".3" stop-color="#b7bfba"/><stop offset=".49" stop-color="#f8faf4"/><stop offset=".6" stop-color="#838f89"/><stop offset="1" stop-color="#cbd0c9"/></linearGradient>
  <filter id="soft"><feGaussianBlur stdDeviation="7"/></filter>
- <filter id="glow"><feGaussianBlur stdDeviation="4"/></filter>
  <filter id="specular"><feGaussianBlur stdDeviation="3"/></filter>
  <clipPath id="frontClip"><path d="M225 524 Q224 503 250 505 L651 526 Q679 528 680 557 L680 749 Q680 780 650 784 L253 770 Q226 768 225 740Z"/></clipPath>
 </defs>
@@ -109,12 +120,23 @@ def make_svg():
 <path d="M729 640L733 644" stroke="#4d5c4c" stroke-width="1.4"/>
 ''')
     # The two hovering slices cast separate shadows on the counter.
-    s += [shadow(357, 805, 85, 13, .055), shadow(565, 814, 81, 12, .05)]
+    s += [shadow(357, 805, 85, 13, 0.45), shadow(565, 814, 81, 12, 0.45)]
+    # Bake the glow's Gaussian blur into its alpha mask since CairoSVG skips it.
+    glow_std_deviation = 10
+    rings = ['<svg xmlns="http://www.w3.org/2000/svg" width="304" height="128" viewBox="-152 -64 304 128">']
+    for rx, ry, width in [(102, 19, 10), (98, 17, 2), (108, 23, 1.1)]:
+        rings.append(f'<ellipse rx="{rx}" ry="{ry}" fill="none" stroke="white" stroke-width="{width}" opacity="0.45"/>')
+    rings.append('</svg>')
+    mask_png = cairosvg.svg2png(bytestring=''.join(rings).encode(), output_width=608, output_height=256)
+    mask = Image.open(io.BytesIO(mask_png)).getchannel('A')
+    glow = Image.new('RGBA', mask.size, '#e9a242')
+    glow.putalpha(mask.filter(ImageFilter.GaussianBlur(2 * glow_std_deviation)))
+    glow_png = io.BytesIO()
+    glow.save(glow_png, format='PNG')
+    glow_href = base64.b64encode(glow_png.getvalue()).decode('ascii')
     for x, y, angle in [(360, 402, -8), (579, 388, 9)]:
-        s.append(f'<g transform="translate({x} {y}) rotate({angle})" fill="none">')
-        for rx, ry, op, width in [(102, 19, .055, 10), (98, 17, .12, 2), (108, 23, .06, 1.1)]:
-            s.append(f'<ellipse rx="{rx}" ry="{ry}" stroke="#e9a242" stroke-width="{width}" opacity="{op}" filter="url(#glow)"/>')
-        s.append('</g>')
+        s.append(f'<image xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="data:image/png;base64,{glow_href}" '
+                 f'x="-152" y="-64" width="304" height="128" transform="translate({x} {y}) rotate({angle})"/>')
     s += [toast(357, 335, -8, 0), toast(579, 317, 8, 1)]
     # Single accessory: a porcelain butter dish, with one curled shaving and knife.
     s.append('''<path d="M728 780 Q726 769 742 762 L866 752 Q883 752 900 768 L916 786 Q921 795 906 801 L774 816 Q756 817 747 806Z" fill="url(#ceramic)" stroke="#bcc0b8" stroke-width="1"/>
